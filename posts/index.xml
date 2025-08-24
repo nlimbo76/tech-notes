@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on gBear's Tech Notes</title><link>https://nlimbo76.github.io/tech-notes/posts/</link><description>Recent content in Posts on gBear's Tech Notes</description><generator>Hugo -- 0.148.2</generator><language>ko-kr</language><lastBuildDate>Sat, 23 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://nlimbo76.github.io/tech-notes/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>임베디드 시스템 개발 방법론 정리 (확장판)</title><link>https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/</link><pubDate>Sat, 23 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
+&lt;p>임베디드 시스템 개발은 일반 애플리케이션과 달리 **자원 제약(메모리·CPU·전력)**과 &lt;strong>실시간성&lt;/strong>을 고려해야 합니다.
+이 때문에 개발 방법론 선택이 프로젝트의 성공과 실패를 크게 좌우합니다.
+본 문서는 실무 정리노트 스타일로 핵심 개념을 먼저 요약하고, 아래에 부연 설명과 연계 글 링크를 제공합니다.&lt;/p>
+&lt;hr>
+&lt;h2 id="1-전통적-개발-방법론">1) 전통적 개발 방법론&lt;/h2>
+&lt;h3 id="워터폴-모델--핵심-요약">워터폴 모델 — 핵심 요약&lt;/h3>
+&lt;ul>
+&lt;li>요구사항 → 설계 → 구현 → 검증 → 유지보수 순의 직선적 단계 진행&lt;/li>
+&lt;li>&lt;strong>장점:&lt;/strong> 문서화/이력 관리 용이, 하드웨어 규격이 고정된 프로젝트에 유리&lt;/li>
+&lt;li>&lt;strong>단점:&lt;/strong> 요구사항 변경에 취약, 환경 변동성 반영 어려움&lt;/li>
+&lt;/ul>
+&lt;p>&lt;strong>부연 설명&lt;/strong>
+하드웨어(SoC/MCU/센서)가 얼리-락된 상황에서 공정/양산 관점으로 추진할 때 특히 안정적입니다.
+다만 IoT처럼 요구사항이 자주 바뀌는 경우에는 초기 설계를 과도하게 견고하게 만드는 실수를 주의해야 합니다.&lt;/p></description></item></channel></rss>
