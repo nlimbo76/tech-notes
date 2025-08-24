@@ -1,0 +1,186 @@
+<!doctype html><html lang=en dir=auto><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>키 롤오버와 신뢰 앵커 마이그레이션 (정리판) | gBear's Tech Notes</title><meta name=keywords content="서명키,키롤오버,신뢰앵커,보안,Anti-rollback"><meta name=description content="개요
+이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 신뢰 앵커(Trust Anchor) 갱신이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.
+
+핵심 원칙
+
+이중 수용 윈도우: N과 N+1 키를 일정 기간 동시 수용 → 이후 N 폐기.
+키 식별자: manifest에 pub_key_id(또는 cert chain) 포함, 부트로더는 키 테이블에서 조회.
+신뢰 앵커 버저닝: TA(version) 필드로 부트로더 내장 키 세트를 버전관리.
+Anti-rollback: 펌웨어/부트로더 모두 카운터 또는 버전 퓨즈를 이용해 다운그레이드 방지.
+오프라인 서명/HSM: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적.
+
+
+마이그레이션 단계
+
+준비: 부트로더 업데이트로 키 테이블에 N+1 추가, TA 버전 증가(ta_ver = 2).
+이행: 배포 파이프라인에서 N+1 키로 서명 시작, 부트로더는 N/N+1 둘 다 허용.
+폐기: 충분한 안정화 후 accept={{N+1}}만 허용. CRL/KeyRevocationList(간단 테이블) 반영.
+청소: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관.
+
+
+부트로더 구조(예시)
+typedef struct { const uint8_t* pk; uint16_t len; uint16_t flags; uint16_t kid; uint16_t ta_ver; } keyent_t;
+// flags: ACCEPT=1, REVOKED=2
+extern const keyent_t KEYTAB[];  // ROM/RODATA
+bool verify_sig(const manifest_t* m, const uint8_t* img, size_t len){
+  const keyent_t* k = find_key_by_id(m->sign.pub_key_id);
+  if (!k || (k->flags & REVOKED)) return false;
+  if (k->ta_ver < m->min_ta_ver) return false;
+  return ed25519_verify(m->sign.sig, signed_bytes(m), signed_len(m), k->pk);
+}
+
+테이블 업데이트: 부트로더 업데이트나 별도 TA 세그먼트 업데이트로 반영.
+폐기 표식: REVOKED 플래그/버전으로 거부.
+
+
+배포 파이프라인
+
+키 ID 주입: 빌드 시 pub_key_id, min_ta_ver를 manifest에 삽입.
+이중 서명(선택): 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시).
+감사/가시성: 어떤 키로 서명·검증되었는지 메트릭화.
+
+
+사고 대응(키 유출/취소)
+
+즉시 KeyRevocationList 업데이트 + TA 버전 인상(구 키 거부).
+N+1 키로 강제 업데이트 배포(안전 모드 진입 명령 포함).
+RMA/현장용 오프라인 리커버리 키는 완전히 별도 관리.
+
+
+체크리스트
+
+ pub_key_id/ta_ver가 manifest/부트로더에 일관되게 반영.
+ 이중 수용 윈도우와 최종 폐기 일정이 문서화.
+ Anti-rollback 카운터/퓨즈 정책 적용.
+ HSM/오프라인 서명과 접근권한 최소화.
+ 키 유출 대응 절차/연락망/자동화 스크립트 준비.
+
+
+흔한 함정
+
+  
+      
+          상황
+          문제
+          대안
+      
+  
+  
+      
+          키 교체 직후 대량 실패
+          구형 부트로더가 N+1을 모름
+          부트로더 업데이트를 선행하고 폭넓은 이중 수용 기간
+      
+      
+          키 폐기 누락
+          구 키 계속 허용
+          Revocation 리스트와 TA 버전 상향 강제
+      
+      
+          장기 필드 장치
+          업데이트 드물어 구 키만 인식
+          현장 방문 없이 Safe Mode OTA로 TA 업데이트
+      
+  
+"><meta name=author content="gBear"><link rel=canonical href=https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/><link crossorigin=anonymous href=/tech-notes/assets/css/stylesheet.8fe10233a706bc87f2e08b3cf97b8bd4c0a80f10675a143675d59212121037c0.css integrity="sha256-j+ECM6cGvIfy4Is8+XuL1MCoDxBnWhQ2ddWSEhIQN8A=" rel="preload stylesheet" as=style><link rel=icon href=https://nlimbo76.github.io/tech-notes/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://nlimbo76.github.io/tech-notes/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://nlimbo76.github.io/tech-notes/favicon-32x32.png><link rel=apple-touch-icon href=https://nlimbo76.github.io/tech-notes/apple-touch-icon.png><link rel=mask-icon href=https://nlimbo76.github.io/tech-notes/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/><noscript><style>#theme-toggle,.top-link{display:none}</style><style>@media(prefers-color-scheme:dark){:root{--theme:rgb(29, 30, 32);--entry:rgb(46, 46, 51);--primary:rgb(218, 218, 219);--secondary:rgb(155, 156, 157);--tertiary:rgb(65, 66, 68);--content:rgb(196, 196, 197);--code-block-bg:rgb(46, 46, 51);--code-bg:rgb(55, 56, 62);--border:rgb(51, 51, 51)}.list{background:var(--theme)}.list:not(.dark)::-webkit-scrollbar-track{background:0 0}.list:not(.dark)::-webkit-scrollbar-thumb{border-color:var(--theme)}}</style></noscript><meta property="og:url" content="https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/"><meta property="og:site_name" content="gBear's Tech Notes"><meta property="og:title" content="키 롤오버와 신뢰 앵커 마이그레이션 (정리판)"><meta property="og:description" content="개요 이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 신뢰 앵커(Trust Anchor) 갱신이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.
+핵심 원칙 이중 수용 윈도우: N과 N+1 키를 일정 기간 동시 수용 → 이후 N 폐기. 키 식별자: manifest에 pub_key_id(또는 cert chain) 포함, 부트로더는 키 테이블에서 조회. 신뢰 앵커 버저닝: TA(version) 필드로 부트로더 내장 키 세트를 버전관리. Anti-rollback: 펌웨어/부트로더 모두 카운터 또는 버전 퓨즈를 이용해 다운그레이드 방지. 오프라인 서명/HSM: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적. 마이그레이션 단계 준비: 부트로더 업데이트로 키 테이블에 N+1 추가, TA 버전 증가(ta_ver = 2). 이행: 배포 파이프라인에서 N+1 키로 서명 시작, 부트로더는 N/N+1 둘 다 허용. 폐기: 충분한 안정화 후 accept={{N+1}}만 허용. CRL/KeyRevocationList(간단 테이블) 반영. 청소: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관. 부트로더 구조(예시) typedef struct { const uint8_t* pk; uint16_t len; uint16_t flags; uint16_t kid; uint16_t ta_ver; } keyent_t; // flags: ACCEPT=1, REVOKED=2 extern const keyent_t KEYTAB[]; // ROM/RODATA bool verify_sig(const manifest_t* m, const uint8_t* img, size_t len){ const keyent_t* k = find_key_by_id(m->sign.pub_key_id); if (!k || (k->flags & REVOKED)) return false; if (k->ta_ver < m->min_ta_ver) return false; return ed25519_verify(m->sign.sig, signed_bytes(m), signed_len(m), k->pk); } 테이블 업데이트: 부트로더 업데이트나 별도 TA 세그먼트 업데이트로 반영. 폐기 표식: REVOKED 플래그/버전으로 거부. 배포 파이프라인 키 ID 주입: 빌드 시 pub_key_id, min_ta_ver를 manifest에 삽입. 이중 서명(선택): 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시). 감사/가시성: 어떤 키로 서명·검증되었는지 메트릭화. 사고 대응(키 유출/취소) 즉시 KeyRevocationList 업데이트 + TA 버전 인상(구 키 거부). N+1 키로 강제 업데이트 배포(안전 모드 진입 명령 포함). RMA/현장용 오프라인 리커버리 키는 완전히 별도 관리. 체크리스트 pub_key_id/ta_ver가 manifest/부트로더에 일관되게 반영. 이중 수용 윈도우와 최종 폐기 일정이 문서화. Anti-rollback 카운터/퓨즈 정책 적용. HSM/오프라인 서명과 접근권한 최소화. 키 유출 대응 절차/연락망/자동화 스크립트 준비. 흔한 함정 상황 문제 대안 키 교체 직후 대량 실패 구형 부트로더가 N+1을 모름 부트로더 업데이트를 선행하고 폭넓은 이중 수용 기간 키 폐기 누락 구 키 계속 허용 Revocation 리스트와 TA 버전 상향 강제 장기 필드 장치 업데이트 드물어 구 키만 인식 현장 방문 없이 Safe Mode OTA로 TA 업데이트 "><meta property="og:locale" content="ko-kr"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2025-08-24T00:00:00+00:00"><meta property="article:modified_time" content="2025-08-24T00:00:00+00:00"><meta property="article:tag" content="서명키"><meta property="article:tag" content="키롤오버"><meta property="article:tag" content="신뢰앵커"><meta property="article:tag" content="보안"><meta property="article:tag" content="Anti-Rollback"><meta property="og:see_also" content="https://nlimbo76.github.io/tech-notes/posts/ota-signed-pipeline/"><meta property="og:see_also" content="https://nlimbo76.github.io/tech-notes/posts/delta-ota-storage-layout/"><meta property="og:see_also" content="https://nlimbo76.github.io/tech-notes/posts/bootloader-ab-rollback/"><meta property="og:see_also" content="https://nlimbo76.github.io/tech-notes/posts/safe-mode-recovery/"><meta name=twitter:card content="summary"><meta name=twitter:title content="키 롤오버와 신뢰 앵커 마이그레이션 (정리판)"><meta name=twitter:description content="개요
+이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 신뢰 앵커(Trust Anchor) 갱신이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.
+
+핵심 원칙
+
+이중 수용 윈도우: N과 N+1 키를 일정 기간 동시 수용 → 이후 N 폐기.
+키 식별자: manifest에 pub_key_id(또는 cert chain) 포함, 부트로더는 키 테이블에서 조회.
+신뢰 앵커 버저닝: TA(version) 필드로 부트로더 내장 키 세트를 버전관리.
+Anti-rollback: 펌웨어/부트로더 모두 카운터 또는 버전 퓨즈를 이용해 다운그레이드 방지.
+오프라인 서명/HSM: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적.
+
+
+마이그레이션 단계
+
+준비: 부트로더 업데이트로 키 테이블에 N+1 추가, TA 버전 증가(ta_ver = 2).
+이행: 배포 파이프라인에서 N+1 키로 서명 시작, 부트로더는 N/N+1 둘 다 허용.
+폐기: 충분한 안정화 후 accept={{N+1}}만 허용. CRL/KeyRevocationList(간단 테이블) 반영.
+청소: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관.
+
+
+부트로더 구조(예시)
+typedef struct { const uint8_t* pk; uint16_t len; uint16_t flags; uint16_t kid; uint16_t ta_ver; } keyent_t;
+// flags: ACCEPT=1, REVOKED=2
+extern const keyent_t KEYTAB[];  // ROM/RODATA
+bool verify_sig(const manifest_t* m, const uint8_t* img, size_t len){
+  const keyent_t* k = find_key_by_id(m->sign.pub_key_id);
+  if (!k || (k->flags & REVOKED)) return false;
+  if (k->ta_ver < m->min_ta_ver) return false;
+  return ed25519_verify(m->sign.sig, signed_bytes(m), signed_len(m), k->pk);
+}
+
+테이블 업데이트: 부트로더 업데이트나 별도 TA 세그먼트 업데이트로 반영.
+폐기 표식: REVOKED 플래그/버전으로 거부.
+
+
+배포 파이프라인
+
+키 ID 주입: 빌드 시 pub_key_id, min_ta_ver를 manifest에 삽입.
+이중 서명(선택): 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시).
+감사/가시성: 어떤 키로 서명·검증되었는지 메트릭화.
+
+
+사고 대응(키 유출/취소)
+
+즉시 KeyRevocationList 업데이트 + TA 버전 인상(구 키 거부).
+N+1 키로 강제 업데이트 배포(안전 모드 진입 명령 포함).
+RMA/현장용 오프라인 리커버리 키는 완전히 별도 관리.
+
+
+체크리스트
+
+ pub_key_id/ta_ver가 manifest/부트로더에 일관되게 반영.
+ 이중 수용 윈도우와 최종 폐기 일정이 문서화.
+ Anti-rollback 카운터/퓨즈 정책 적용.
+ HSM/오프라인 서명과 접근권한 최소화.
+ 키 유출 대응 절차/연락망/자동화 스크립트 준비.
+
+
+흔한 함정
+
+  
+      
+          상황
+          문제
+          대안
+      
+  
+  
+      
+          키 교체 직후 대량 실패
+          구형 부트로더가 N+1을 모름
+          부트로더 업데이트를 선행하고 폭넓은 이중 수용 기간
+      
+      
+          키 폐기 누락
+          구 키 계속 허용
+          Revocation 리스트와 TA 버전 상향 강제
+      
+      
+          장기 필드 장치
+          업데이트 드물어 구 키만 인식
+          현장 방문 없이 Safe Mode OTA로 TA 업데이트
+      
+  
+"><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Posts","item":"https://nlimbo76.github.io/tech-notes/posts/"},{"@type":"ListItem","position":2,"name":"키 롤오버와 신뢰 앵커 마이그레이션 (정리판)","item":"https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"키 롤오버와 신뢰 앵커 마이그레이션 (정리판)","name":"키 롤오버와 신뢰 앵커 마이그레이션 (정리판)","description":"개요 이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 신뢰 앵커(Trust Anchor) 갱신이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.\n핵심 원칙 이중 수용 윈도우: N과 N+1 키를 일정 기간 동시 수용 → 이후 N 폐기. 키 식별자: manifest에 pub_key_id(또는 cert chain) 포함, 부트로더는 키 테이블에서 조회. 신뢰 앵커 버저닝: TA(version) 필드로 부트로더 내장 키 세트를 버전관리. Anti-rollback: 펌웨어/부트로더 모두 카운터 또는 버전 퓨즈를 이용해 다운그레이드 방지. 오프라인 서명/HSM: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적. 마이그레이션 단계 준비: 부트로더 업데이트로 키 테이블에 N+1 추가, TA 버전 증가(ta_ver = 2). 이행: 배포 파이프라인에서 N+1 키로 서명 시작, 부트로더는 N/N+1 둘 다 허용. 폐기: 충분한 안정화 후 accept={{N+1}}만 허용. CRL/KeyRevocationList(간단 테이블) 반영. 청소: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관. 부트로더 구조(예시) typedef struct { const uint8_t* pk; uint16_t len; uint16_t flags; uint16_t kid; uint16_t ta_ver; } keyent_t; // flags: ACCEPT=1, REVOKED=2 extern const keyent_t KEYTAB[]; // ROM/RODATA bool verify_sig(const manifest_t* m, const uint8_t* img, size_t len){ const keyent_t* k = find_key_by_id(m-\u0026gt;sign.pub_key_id); if (!k || (k-\u0026gt;flags \u0026amp; REVOKED)) return false; if (k-\u0026gt;ta_ver \u0026lt; m-\u0026gt;min_ta_ver) return false; return ed25519_verify(m-\u0026gt;sign.sig, signed_bytes(m), signed_len(m), k-\u0026gt;pk); } 테이블 업데이트: 부트로더 업데이트나 별도 TA 세그먼트 업데이트로 반영. 폐기 표식: REVOKED 플래그/버전으로 거부. 배포 파이프라인 키 ID 주입: 빌드 시 pub_key_id, min_ta_ver를 manifest에 삽입. 이중 서명(선택): 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시). 감사/가시성: 어떤 키로 서명·검증되었는지 메트릭화. 사고 대응(키 유출/취소) 즉시 KeyRevocationList 업데이트 + TA 버전 인상(구 키 거부). N+1 키로 강제 업데이트 배포(안전 모드 진입 명령 포함). RMA/현장용 오프라인 리커버리 키는 완전히 별도 관리. 체크리스트 pub_key_id/ta_ver가 manifest/부트로더에 일관되게 반영. 이중 수용 윈도우와 최종 폐기 일정이 문서화. Anti-rollback 카운터/퓨즈 정책 적용. HSM/오프라인 서명과 접근권한 최소화. 키 유출 대응 절차/연락망/자동화 스크립트 준비. 흔한 함정 상황 문제 대안 키 교체 직후 대량 실패 구형 부트로더가 N+1을 모름 부트로더 업데이트를 선행하고 폭넓은 이중 수용 기간 키 폐기 누락 구 키 계속 허용 Revocation 리스트와 TA 버전 상향 강제 장기 필드 장치 업데이트 드물어 구 키만 인식 현장 방문 없이 Safe Mode OTA로 TA 업데이트 ","keywords":["서명키","키롤오버","신뢰앵커","보안","Anti-rollback"],"articleBody":"개요 이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 신뢰 앵커(Trust Anchor) 갱신이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.\n핵심 원칙 이중 수용 윈도우: N과 N+1 키를 일정 기간 동시 수용 → 이후 N 폐기. 키 식별자: manifest에 pub_key_id(또는 cert chain) 포함, 부트로더는 키 테이블에서 조회. 신뢰 앵커 버저닝: TA(version) 필드로 부트로더 내장 키 세트를 버전관리. Anti-rollback: 펌웨어/부트로더 모두 카운터 또는 버전 퓨즈를 이용해 다운그레이드 방지. 오프라인 서명/HSM: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적. 마이그레이션 단계 준비: 부트로더 업데이트로 키 테이블에 N+1 추가, TA 버전 증가(ta_ver = 2). 이행: 배포 파이프라인에서 N+1 키로 서명 시작, 부트로더는 N/N+1 둘 다 허용. 폐기: 충분한 안정화 후 accept={{N+1}}만 허용. CRL/KeyRevocationList(간단 테이블) 반영. 청소: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관. 부트로더 구조(예시) typedef struct { const uint8_t* pk; uint16_t len; uint16_t flags; uint16_t kid; uint16_t ta_ver; } keyent_t; // flags: ACCEPT=1, REVOKED=2 extern const keyent_t KEYTAB[]; // ROM/RODATA bool verify_sig(const manifest_t* m, const uint8_t* img, size_t len){ const keyent_t* k = find_key_by_id(m-\u003esign.pub_key_id); if (!k || (k-\u003eflags \u0026 REVOKED)) return false; if (k-\u003eta_ver \u003c m-\u003emin_ta_ver) return false; return ed25519_verify(m-\u003esign.sig, signed_bytes(m), signed_len(m), k-\u003epk); } 테이블 업데이트: 부트로더 업데이트나 별도 TA 세그먼트 업데이트로 반영. 폐기 표식: REVOKED 플래그/버전으로 거부. 배포 파이프라인 키 ID 주입: 빌드 시 pub_key_id, min_ta_ver를 manifest에 삽입. 이중 서명(선택): 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시). 감사/가시성: 어떤 키로 서명·검증되었는지 메트릭화. 사고 대응(키 유출/취소) 즉시 KeyRevocationList 업데이트 + TA 버전 인상(구 키 거부). N+1 키로 강제 업데이트 배포(안전 모드 진입 명령 포함). RMA/현장용 오프라인 리커버리 키는 완전히 별도 관리. 체크리스트 pub_key_id/ta_ver가 manifest/부트로더에 일관되게 반영. 이중 수용 윈도우와 최종 폐기 일정이 문서화. Anti-rollback 카운터/퓨즈 정책 적용. HSM/오프라인 서명과 접근권한 최소화. 키 유출 대응 절차/연락망/자동화 스크립트 준비. 흔한 함정 상황 문제 대안 키 교체 직후 대량 실패 구형 부트로더가 N+1을 모름 부트로더 업데이트를 선행하고 폭넓은 이중 수용 기간 키 폐기 누락 구 키 계속 허용 Revocation 리스트와 TA 버전 상향 강제 장기 필드 장치 업데이트 드물어 구 키만 인식 현장 방문 없이 Safe Mode OTA로 TA 업데이트 ","wordCount":"336","inLanguage":"en","datePublished":"2025-08-24T00:00:00Z","dateModified":"2025-08-24T00:00:00Z","author":{"@type":"Person","name":"gBear"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/"},"publisher":{"@type":"Organization","name":"gBear's Tech Notes","logo":{"@type":"ImageObject","url":"https://nlimbo76.github.io/tech-notes/favicon.ico"}}}</script></head><body id=top><script>localStorage.getItem("pref-theme")==="dark"?document.body.classList.add("dark"):localStorage.getItem("pref-theme")==="light"?document.body.classList.remove("dark"):window.matchMedia("(prefers-color-scheme: dark)").matches&&document.body.classList.add("dark")</script><header class=header><nav class=nav><div class=logo><a href=https://nlimbo76.github.io/tech-notes/ accesskey=h title="gBear's Tech Notes (Alt + H)">gBear's Tech Notes</a><div class=logo-switches><button id=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg id="moon" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg id="sun" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></div><ul id=menu><li><a href=https://nlimbo76.github.io/tech-notes/posts/ title=Posts><span>Posts</span></a></li><li><a href=https://nlimbo76.github.io/tech-notes/series/ title=Series><span>Series</span></a></li><li><a href=https://nlimbo76.github.io/tech-notes/tags/ title=Tags><span>Tags</span></a></li></ul></nav></header><main class=main><article class=post-single><header class=post-header><div class=breadcrumbs><a href=https://nlimbo76.github.io/tech-notes/>Home</a>&nbsp;»&nbsp;<a href=https://nlimbo76.github.io/tech-notes/posts/>Posts</a></div><h1 class="post-title entry-hint-parent">키 롤오버와 신뢰 앵커 마이그레이션 (정리판)</h1><div class=post-meta><span title='2025-08-24 00:00:00 +0000 UTC'>2025-08-24</span>&nbsp;·&nbsp;2 min&nbsp;·&nbsp;gBear</div></header><div class=toc><details><summary accesskey=c title="(Alt + C)"><span class=details>Table of Contents</span></summary><div class=inner><ul><li><a href=#%ea%b0%9c%ec%9a%94 aria-label=개요>개요</a></li><li><a href=#%ed%95%b5%ec%8b%ac-%ec%9b%90%ec%b9%99 aria-label="핵심 원칙">핵심 원칙</a></li><li><a href=#%eb%a7%88%ec%9d%b4%ea%b7%b8%eb%a0%88%ec%9d%b4%ec%85%98-%eb%8b%a8%ea%b3%84 aria-label="마이그레이션 단계">마이그레이션 단계</a></li><li><a href=#%eb%b6%80%ed%8a%b8%eb%a1%9c%eb%8d%94-%ea%b5%ac%ec%a1%b0%ec%98%88%ec%8b%9c aria-label="부트로더 구조(예시)">부트로더 구조(예시)</a></li><li><a href=#%eb%b0%b0%ed%8f%ac-%ed%8c%8c%ec%9d%b4%ed%94%84%eb%9d%bc%ec%9d%b8 aria-label="배포 파이프라인">배포 파이프라인</a></li><li><a href=#%ec%82%ac%ea%b3%a0-%eb%8c%80%ec%9d%91%ed%82%a4-%ec%9c%a0%ec%b6%9c%ec%b7%a8%ec%86%8c aria-label="사고 대응(키 유출/취소)">사고 대응(키 유출/취소)</a></li><li><a href=#%ec%b2%b4%ed%81%ac%eb%a6%ac%ec%8a%a4%ed%8a%b8 aria-label=체크리스트>체크리스트</a></li><li><a href=#%ed%9d%94%ed%95%9c-%ed%95%a8%ec%a0%95 aria-label="흔한 함정">흔한 함정</a></li></ul></div></details></div><div class=post-content><h2 id=개요>개요<a hidden class=anchor aria-hidden=true href=#개요>#</a></h2><p>이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 <strong>신뢰 앵커(Trust Anchor) 갱신</strong>이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.</p><hr><h2 id=핵심-원칙>핵심 원칙<a hidden class=anchor aria-hidden=true href=#핵심-원칙>#</a></h2><ul><li><strong>이중 수용 윈도우</strong>: N과 N+1 키를 일정 기간 <strong>동시 수용</strong> → 이후 N <strong>폐기</strong>.</li><li><strong>키 식별자</strong>: manifest에 <code>pub_key_id</code>(또는 cert chain) 포함, 부트로더는 <strong>키 테이블</strong>에서 조회.</li><li><strong>신뢰 앵커 버저닝</strong>: TA(version) 필드로 <strong>부트로더 내장 키 세트</strong>를 버전관리.</li><li><strong>Anti-rollback</strong>: 펌웨어/부트로더 모두 <strong>카운터</strong> 또는 <strong>버전 퓨즈</strong>를 이용해 다운그레이드 방지.</li><li><strong>오프라인 서명/HSM</strong>: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적.</li></ul><hr><h2 id=마이그레이션-단계>마이그레이션 단계<a hidden class=anchor aria-hidden=true href=#마이그레이션-단계>#</a></h2><ol><li><strong>준비</strong>: 부트로더 업데이트로 <strong>키 테이블에 N+1 추가</strong>, TA 버전 증가(<code>ta_ver = 2</code>).</li><li><strong>이행</strong>: 배포 파이프라인에서 <strong>N+1 키로 서명</strong> 시작, 부트로더는 N/N+1 둘 다 허용.</li><li><strong>폐기</strong>: 충분한 안정화 후 <code>accept={{N+1}}</code>만 허용. <strong>CRL/KeyRevocationList</strong>(간단 테이블) 반영.</li><li><strong>청소</strong>: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관.</li></ol><hr><h2 id=부트로더-구조예시>부트로더 구조(예시)<a hidden class=anchor aria-hidden=true href=#부트로더-구조예시>#</a></h2><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span> <span class=k>const</span> <span class=kt>uint8_t</span><span class=o>*</span> <span class=n>pk</span><span class=p>;</span> <span class=kt>uint16_t</span> <span class=n>len</span><span class=p>;</span> <span class=kt>uint16_t</span> <span class=n>flags</span><span class=p>;</span> <span class=kt>uint16_t</span> <span class=n>kid</span><span class=p>;</span> <span class=kt>uint16_t</span> <span class=n>ta_ver</span><span class=p>;</span> <span class=p>}</span> <span class=kt>keyent_t</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=c1>// flags: ACCEPT=1, REVOKED=2
+</span></span></span><span class=line><span class=cl><span class=c1></span><span class=k>extern</span> <span class=k>const</span> <span class=kt>keyent_t</span> <span class=n>KEYTAB</span><span class=p>[];</span>  <span class=c1>// ROM/RODATA
+</span></span></span><span class=line><span class=cl><span class=c1></span><span class=kt>bool</span> <span class=nf>verify_sig</span><span class=p>(</span><span class=k>const</span> <span class=kt>manifest_t</span><span class=o>*</span> <span class=n>m</span><span class=p>,</span> <span class=k>const</span> <span class=kt>uint8_t</span><span class=o>*</span> <span class=n>img</span><span class=p>,</span> <span class=kt>size_t</span> <span class=n>len</span><span class=p>){</span>
+</span></span><span class=line><span class=cl>  <span class=k>const</span> <span class=kt>keyent_t</span><span class=o>*</span> <span class=n>k</span> <span class=o>=</span> <span class=nf>find_key_by_id</span><span class=p>(</span><span class=n>m</span><span class=o>-&gt;</span><span class=n>sign</span><span class=p>.</span><span class=n>pub_key_id</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>k</span> <span class=o>||</span> <span class=p>(</span><span class=n>k</span><span class=o>-&gt;</span><span class=n>flags</span> <span class=o>&amp;</span> <span class=n>REVOKED</span><span class=p>))</span> <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span><span class=n>k</span><span class=o>-&gt;</span><span class=n>ta_ver</span> <span class=o>&lt;</span> <span class=n>m</span><span class=o>-&gt;</span><span class=n>min_ta_ver</span><span class=p>)</span> <span class=k>return</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=nf>ed25519_verify</span><span class=p>(</span><span class=n>m</span><span class=o>-&gt;</span><span class=n>sign</span><span class=p>.</span><span class=n>sig</span><span class=p>,</span> <span class=nf>signed_bytes</span><span class=p>(</span><span class=n>m</span><span class=p>),</span> <span class=nf>signed_len</span><span class=p>(</span><span class=n>m</span><span class=p>),</span> <span class=n>k</span><span class=o>-&gt;</span><span class=n>pk</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><ul><li><strong>테이블 업데이트</strong>: 부트로더 업데이트나 별도 <strong>TA 세그먼트</strong> 업데이트로 반영.</li><li><strong>폐기 표식</strong>: <code>REVOKED</code> 플래그/버전으로 거부.</li></ul><hr><h2 id=배포-파이프라인>배포 파이프라인<a hidden class=anchor aria-hidden=true href=#배포-파이프라인>#</a></h2><ul><li><strong>키 ID 주입</strong>: 빌드 시 <code>pub_key_id</code>, <code>min_ta_ver</code>를 manifest에 삽입.</li><li><strong>이중 서명(선택)</strong>: 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시).</li><li><strong>감사/가시성</strong>: 어떤 키로 서명·검증되었는지 메트릭화.</li></ul><hr><h2 id=사고-대응키-유출취소>사고 대응(키 유출/취소)<a hidden class=anchor aria-hidden=true href=#사고-대응키-유출취소>#</a></h2><ul><li>즉시 <strong>KeyRevocationList</strong> 업데이트 + TA 버전 인상(구 키 거부).</li><li>N+1 키로 <strong>강제 업데이트</strong> 배포(안전 모드 진입 명령 포함).</li><li>RMA/현장용 오프라인 리커버리 키는 <strong>완전히 별도 관리</strong>.</li></ul><hr><h2 id=체크리스트>체크리스트<a hidden class=anchor aria-hidden=true href=#체크리스트>#</a></h2><ul><li><input disabled type=checkbox> <code>pub_key_id</code>/<code>ta_ver</code>가 manifest/부트로더에 일관되게 반영.</li><li><input disabled type=checkbox> 이중 수용 윈도우와 최종 폐기 일정이 문서화.</li><li><input disabled type=checkbox> Anti-rollback 카운터/퓨즈 정책 적용.</li><li><input disabled type=checkbox> HSM/오프라인 서명과 접근권한 최소화.</li><li><input disabled type=checkbox> 키 유출 대응 절차/연락망/자동화 스크립트 준비.</li></ul><hr><h2 id=흔한-함정>흔한 함정<a hidden class=anchor aria-hidden=true href=#흔한-함정>#</a></h2><table><thead><tr><th>상황</th><th>문제</th><th>대안</th></tr></thead><tbody><tr><td>키 교체 직후 대량 실패</td><td>구형 부트로더가 N+1을 모름</td><td>부트로더 업데이트를 <strong>선행</strong>하고 폭넓은 이중 수용 기간</td></tr><tr><td>키 폐기 누락</td><td>구 키 계속 허용</td><td>Revocation 리스트와 TA 버전 상향 강제</td></tr><tr><td>장기 필드 장치</td><td>업데이트 드물어 구 키만 인식</td><td>현장 방문 없이 <strong>Safe Mode OTA</strong>로 TA 업데이트</td></tr></tbody></table></div><footer class=post-footer><ul class=post-tags><li><a href=https://nlimbo76.github.io/tech-notes/tags/%EC%84%9C%EB%AA%85%ED%82%A4/>서명키</a></li><li><a href=https://nlimbo76.github.io/tech-notes/tags/%ED%82%A4%EB%A1%A4%EC%98%A4%EB%B2%84/>키롤오버</a></li><li><a href=https://nlimbo76.github.io/tech-notes/tags/%EC%8B%A0%EB%A2%B0%EC%95%B5%EC%BB%A4/>신뢰앵커</a></li><li><a href=https://nlimbo76.github.io/tech-notes/tags/%EB%B3%B4%EC%95%88/>보안</a></li><li><a href=https://nlimbo76.github.io/tech-notes/tags/anti-rollback/>Anti-Rollback</a></li></ul><nav class=paginav><a class=prev href=https://nlimbo76.github.io/tech-notes/posts/embedded-test-strategy/><span class=title>« Prev</span><br><span>임베디드 코드 품질 개선을 위한 테스트 전략 (정리판)</span>
+</a><a class=next href=https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/><span class=title>Next »</span><br><span>임베디드 시스템 개발 방법론 정리 (확장판)</span></a></nav></footer></article></main><footer class=footer><span>&copy; 2025 <a href=https://nlimbo76.github.io/tech-notes/>gBear's Tech Notes</a></span> ·
+<span>Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top aria-label="go to top" title="Go to Top (Alt + G)" class=top-link id=top-link accesskey=g><svg viewBox="0 0 12 6" fill="currentColor"><path d="M12 6H0l6-6z"/></svg>
+</a><script>let menu=document.getElementById("menu");menu&&(menu.scrollLeft=localStorage.getItem("menu-scroll-position"),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}),document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var t=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView({behavior:"smooth"}),t==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${t}`)})})</script><script>var mybutton=document.getElementById("top-link");window.onscroll=function(){document.body.scrollTop>800||document.documentElement.scrollTop>800?(mybutton.style.visibility="visible",mybutton.style.opacity="1"):(mybutton.style.visibility="hidden",mybutton.style.opacity="0")}</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{document.body.className.includes("dark")?(document.body.classList.remove("dark"),localStorage.setItem("pref-theme","light")):(document.body.classList.add("dark"),localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

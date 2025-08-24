@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>서명키 on gBear's Tech Notes</title><link>https://nlimbo76.github.io/tech-notes/tags/%EC%84%9C%EB%AA%85%ED%82%A4/</link><description>Recent content in 서명키 on gBear's Tech Notes</description><generator>Hugo -- 0.148.2</generator><language>ko-kr</language><lastBuildDate>Sun, 24 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://nlimbo76.github.io/tech-notes/tags/%EC%84%9C%EB%AA%85%ED%82%A4/index.xml" rel="self" type="application/rss+xml"/><item><title>키 롤오버와 신뢰 앵커 마이그레이션 (정리판)</title><link>https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/</link><pubDate>Sun, 24 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/key-rollover-trust-anchor/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
+&lt;p>이미지 서명 체계는 시간이 지날수록 **키 교체(롤오버)**와 &lt;strong>신뢰 앵커(Trust Anchor) 갱신&lt;/strong>이 필요합니다. 교체가 어설프면 정상 이미지도 거부되거나, 반대로 위조 이미지가 통과할 수 있습니다. 안전한 이동경로를 정리합니다.&lt;/p>
+&lt;hr>
+&lt;h2 id="핵심-원칙">핵심 원칙&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>이중 수용 윈도우&lt;/strong>: N과 N+1 키를 일정 기간 &lt;strong>동시 수용&lt;/strong> → 이후 N &lt;strong>폐기&lt;/strong>.&lt;/li>
+&lt;li>&lt;strong>키 식별자&lt;/strong>: manifest에 &lt;code>pub_key_id&lt;/code>(또는 cert chain) 포함, 부트로더는 &lt;strong>키 테이블&lt;/strong>에서 조회.&lt;/li>
+&lt;li>&lt;strong>신뢰 앵커 버저닝&lt;/strong>: TA(version) 필드로 &lt;strong>부트로더 내장 키 세트&lt;/strong>를 버전관리.&lt;/li>
+&lt;li>&lt;strong>Anti-rollback&lt;/strong>: 펌웨어/부트로더 모두 &lt;strong>카운터&lt;/strong> 또는 &lt;strong>버전 퓨즈&lt;/strong>를 이용해 다운그레이드 방지.&lt;/li>
+&lt;li>&lt;strong>오프라인 서명/HSM&lt;/strong>: 키 생성·서명 환경 분리, 접근권한 최소화, 감사 추적.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="마이그레이션-단계">마이그레이션 단계&lt;/h2>
+&lt;ol>
+&lt;li>&lt;strong>준비&lt;/strong>: 부트로더 업데이트로 &lt;strong>키 테이블에 N+1 추가&lt;/strong>, TA 버전 증가(&lt;code>ta_ver = 2&lt;/code>).&lt;/li>
+&lt;li>&lt;strong>이행&lt;/strong>: 배포 파이프라인에서 &lt;strong>N+1 키로 서명&lt;/strong> 시작, 부트로더는 N/N+1 둘 다 허용.&lt;/li>
+&lt;li>&lt;strong>폐기&lt;/strong>: 충분한 안정화 후 &lt;code>accept={{N+1}}&lt;/code>만 허용. &lt;strong>CRL/KeyRevocationList&lt;/strong>(간단 테이블) 반영.&lt;/li>
+&lt;li>&lt;strong>청소&lt;/strong>: 오래된 이미지/메타에서 N 의존성 제거, 로그/감사 보고서 보관.&lt;/li>
+&lt;/ol>
+&lt;hr>
+&lt;h2 id="부트로더-구조예시">부트로더 구조(예시)&lt;/h2>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="line">&lt;span class="cl">&lt;span class="k">typedef&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">uint8_t&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">pk&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="kt">uint16_t&lt;/span> &lt;span class="n">len&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="kt">uint16_t&lt;/span> &lt;span class="n">flags&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="kt">uint16_t&lt;/span> &lt;span class="n">kid&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="kt">uint16_t&lt;/span> &lt;span class="n">ta_ver&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="p">}&lt;/span> &lt;span class="kt">keyent_t&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// flags: ACCEPT=1, REVOKED=2
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="k">extern&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">keyent_t&lt;/span> &lt;span class="n">KEYTAB&lt;/span>&lt;span class="p">[];&lt;/span> &lt;span class="c1">// ROM/RODATA
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="kt">bool&lt;/span> &lt;span class="nf">verify_sig&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="kt">manifest_t&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">m&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">uint8_t&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">img&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">size_t&lt;/span> &lt;span class="n">len&lt;/span>&lt;span class="p">){&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="kt">keyent_t&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">k&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nf">find_key_by_id&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">m&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">sign&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">pub_key_id&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">k&lt;/span> &lt;span class="o">||&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">k&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">flags&lt;/span> &lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">REVOKED&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="nb">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">k&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">ta_ver&lt;/span> &lt;span class="o">&amp;lt;&lt;/span> &lt;span class="n">m&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">min_ta_ver&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="nb">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="nf">ed25519_verify&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">m&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">sign&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">sig&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nf">signed_bytes&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">m&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="nf">signed_len&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">m&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">k&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">pk&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;ul>
+&lt;li>&lt;strong>테이블 업데이트&lt;/strong>: 부트로더 업데이트나 별도 &lt;strong>TA 세그먼트&lt;/strong> 업데이트로 반영.&lt;/li>
+&lt;li>&lt;strong>폐기 표식&lt;/strong>: &lt;code>REVOKED&lt;/code> 플래그/버전으로 거부.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="배포-파이프라인">배포 파이프라인&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>키 ID 주입&lt;/strong>: 빌드 시 &lt;code>pub_key_id&lt;/code>, &lt;code>min_ta_ver&lt;/code>를 manifest에 삽입.&lt;/li>
+&lt;li>&lt;strong>이중 서명(선택)&lt;/strong>: 과도기에 N/N+1 모두 서명해 호환성 확보(부트로더 복수 검증 지원 시).&lt;/li>
+&lt;li>&lt;strong>감사/가시성&lt;/strong>: 어떤 키로 서명·검증되었는지 메트릭화.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="사고-대응키-유출취소">사고 대응(키 유출/취소)&lt;/h2>
+&lt;ul>
+&lt;li>즉시 &lt;strong>KeyRevocationList&lt;/strong> 업데이트 + TA 버전 인상(구 키 거부).&lt;/li>
+&lt;li>N+1 키로 &lt;strong>강제 업데이트&lt;/strong> 배포(안전 모드 진입 명령 포함).&lt;/li>
+&lt;li>RMA/현장용 오프라인 리커버리 키는 &lt;strong>완전히 별도 관리&lt;/strong>.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="체크리스트">체크리스트&lt;/h2>
+&lt;ul>
+&lt;li>&lt;input disabled="" type="checkbox"> &lt;code>pub_key_id&lt;/code>/&lt;code>ta_ver&lt;/code>가 manifest/부트로더에 일관되게 반영.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> 이중 수용 윈도우와 최종 폐기 일정이 문서화.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> Anti-rollback 카운터/퓨즈 정책 적용.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> HSM/오프라인 서명과 접근권한 최소화.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> 키 유출 대응 절차/연락망/자동화 스크립트 준비.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="흔한-함정">흔한 함정&lt;/h2>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>상황&lt;/th>
+&lt;th>문제&lt;/th>
+&lt;th>대안&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>키 교체 직후 대량 실패&lt;/td>
+&lt;td>구형 부트로더가 N+1을 모름&lt;/td>
+&lt;td>부트로더 업데이트를 &lt;strong>선행&lt;/strong>하고 폭넓은 이중 수용 기간&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>키 폐기 누락&lt;/td>
+&lt;td>구 키 계속 허용&lt;/td>
+&lt;td>Revocation 리스트와 TA 버전 상향 강제&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>장기 필드 장치&lt;/td>
+&lt;td>업데이트 드물어 구 키만 인식&lt;/td>
+&lt;td>현장 방문 없이 &lt;strong>Safe Mode OTA&lt;/strong>로 TA 업데이트&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table></description></item></channel></rss>
