@@ -1,4 +1,185 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on gBear's Tech Notes</title><link>https://nlimbo76.github.io/tech-notes/posts/</link><description>Recent content in Posts on gBear's Tech Notes</description><generator>Hugo -- 0.148.2</generator><language>ko-kr</language><lastBuildDate>Sat, 23 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://nlimbo76.github.io/tech-notes/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>임베디드 시스템 개발 방법론 정리 (확장판)</title><link>https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/</link><pubDate>Sat, 23 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Posts on gBear's Tech Notes</title><link>https://nlimbo76.github.io/tech-notes/posts/</link><description>Recent content in Posts on gBear's Tech Notes</description><generator>Hugo -- 0.148.2</generator><language>ko-kr</language><lastBuildDate>Sun, 24 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="https://nlimbo76.github.io/tech-notes/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>IoT 타깃 소형화 전략: 바이너리·메모리 최적화 체크리스트</title><link>https://nlimbo76.github.io/tech-notes/posts/iot-binary-size-optimization/</link><pubDate>Sun, 24 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/iot-binary-size-optimization/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
+&lt;p>플래시/램이 작은 IoT 보드에서 &lt;strong>1KB가 제품 기능 하나를 살리기도&lt;/strong> 합니다.&lt;br>
+아래 체크리스트를 순서대로 적용하면, 빌드만 바꿔도 &lt;strong>수~수십 %&lt;/strong> 사이즈 절감이 가능해집니다.&lt;/p>
+&lt;hr>
+&lt;h2 id="1-컴파일러링커-플래그">1) 컴파일러/링커 플래그&lt;/h2>
+&lt;ul>
+&lt;li>컴파일: &lt;code>-Os -ffunction-sections -fdata-sections&lt;/code>&lt;/li>
+&lt;li>링커: &lt;code>-Wl,--gc-sections&lt;/code>&lt;/li>
+&lt;li>LTO: &lt;code>-flto&lt;/code> (+ 링커가 LTO 대응인지 확인)&lt;/li>
+&lt;li>C++: 예외/RTTI 비활성 → &lt;code>-fno-exceptions -fno-rtti&lt;/code>&lt;/li>
+&lt;li>로그 레벨 매크로로 &lt;strong>릴리스에서 로그 제거&lt;/strong>:
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#if LOG_LEVEL &amp;lt; INFO
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#define LOGI(...) ((void)0)
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#endif
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="2-표준-라이브러리-선택">2) 표준 라이브러리 선택&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>newlib-nano&lt;/strong>: &lt;code>-specs=nano.specs&lt;/code> / &lt;code>-u _printf_float&lt;/code>(필요한 경우에만 float 지원)&lt;/li>
+&lt;li>C++ iostream 대신 &lt;code>printf&lt;/code>류 사용(필요 최소한).&lt;/li>
+&lt;li>동적할당 최소화: TLSF/정적 풀 등 &lt;strong>고정할당자&lt;/strong> 고려.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="3-코드-구조데이터">3) 코드 구조·데이터&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>const 데이터는 플래시에&lt;/strong>(플랫폼 매크로/속성 활용: &lt;code>__attribute__((section(&amp;quot;.rodata&amp;quot;)))&lt;/code> or &lt;code>PROGMEM&lt;/code>).&lt;/li>
+&lt;li>Look-up table은 &lt;strong>압축/축소(정밀도 다운샘플)&lt;/strong> 후 해제.&lt;/li>
+&lt;li>큰 구조체는 &lt;strong>비트필드&lt;/strong>/Packing, Align 비용 점검.&lt;/li>
+&lt;li>템플릿/인라인 남용 자제(ROM 팽창 유발).&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="4-링커-스크립트섹션">4) 링커 스크립트/섹션&lt;/h2>
+&lt;ul>
+&lt;li>미사용 섹션 제거(&lt;code>--gc-sections&lt;/code>)가 &lt;strong>실제 적용되는지&lt;/strong> &lt;code>nm/objdump&lt;/code>로 확인.&lt;/li>
+&lt;li>Start-up/ISR 테이블 최소화, 약결 사용(weak)로 불필요 핸들러 제거.&lt;/li>
+&lt;li>부트로더/앱 &lt;strong>A/B 파티션&lt;/strong> 설계 시 중복 코드를 공용화.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="5-측정-루틴">5) 측정 루틴&lt;/h2>
+&lt;ul>
+&lt;li>바이너리 크기: &lt;code>size firmware.elf&lt;/code>&lt;/li>
+&lt;li>섹션별: &lt;code>arm-none-eabi-size -A firmware.elf&lt;/code>&lt;/li>
+&lt;li>기여도 분석: &lt;code>nm --size-sort firmware.elf | tail&lt;/code> / &lt;code>objdump -d&lt;/code>&lt;/li>
+&lt;li>변경 전후 비교 스크립트로 &lt;strong>회귀 감시&lt;/strong>.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="6-실무-팁">6) 실무 팁&lt;/h2>
+&lt;ul>
+&lt;li>최적화는 &lt;strong>측정-적용-재측정&lt;/strong> 루프. “감”으로 하지 말 것.&lt;/li>
+&lt;li>기능 플래그(예: &lt;code>FEATURE_X=ON/OFF&lt;/code>)로 &lt;strong>제품 변형&lt;/strong>을 빌드타임 분기.&lt;/li>
+&lt;li>OTA/로그 등 &lt;strong>운영 기능&lt;/strong>은 크기·전력·성능 트레이드오프를 명시.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="체크리스트-복붙해서-쓰세요">체크리스트 (복붙해서 쓰세요)&lt;/h2>
+&lt;ul>
+&lt;li>&lt;input disabled="" type="checkbox"> &lt;code>-Os -ffunction-sections -fdata-sections -Wl,--gc-sections&lt;/code>&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> &lt;code>-flto&lt;/code> + LTO 호환 링커&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> newlib-nano / printf float 최소화&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> 릴리스 로그 제거 / 예외·RTTI 비활성&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> const 데이터 플래시 고정 / LUT 최적화&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> 링커 스크립트 검토 / 미사용 ISR 제거&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> &lt;code>size/nm/objdump&lt;/code> 자동 리포팅&lt;/li>
+&lt;/ul>
+&lt;h2 id="연계-글-예정">연계 글 (예정)&lt;/h2>
+&lt;ul>
+&lt;li>“부트로더 A/B + 안전 롤백 설계”&lt;/li>
+&lt;li>“에너지 예산 기반 최적화(전력·성능·메모리 균형)”&lt;/li>
+&lt;/ul></description></item><item><title>임베디드 유닛/통합 테스트 구축 실습 (Unity+CMock+CMake+QEMU)</title><link>https://nlimbo76.github.io/tech-notes/posts/embedded-unit-integration-cmake/</link><pubDate>Sun, 24 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/embedded-unit-integration-cmake/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
+&lt;p>가볍고 이식성 높은 &lt;strong>Unity + CMock&lt;/strong> 조합과 &lt;strong>CMake/CTest&lt;/strong>로 “호스트에서 빠른 유닛 테스트 → 선택적 QEMU 통합 스모크”를 만드는 실습 가이드입니다. &lt;strong>크로스 환경 의존을 최소화&lt;/strong>하고, &lt;strong>HIL 전&lt;/strong>에 최대한 논리 버그를 제거하는 게 목표입니다.&lt;/p>
+&lt;hr>
+&lt;h2 id="1-폴더-구조예시">1) 폴더 구조(예시)&lt;/h2>
+&lt;pre tabindex="0">&lt;code>project/
+├─ src/ # 제품 코드
+├─ include/ # 헤더
+├─ tests/
+│ ├─ unit/ # 유닛 테스트
+│ └─ integration/ # 통합 테스트 (QEMU 스모크 포함)
+├─ third_party/
+│ ├─ unity/
+│ └─ cmock/
+└─ CMakeLists.txt
+&lt;/code>&lt;/pre>&lt;hr>
+&lt;h2 id="2-의존성-간단-설치">2) 의존성 (간단 설치)&lt;/h2>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-bash" data-lang="bash">&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># Unity &amp;amp; CMock 가져오기 (서브모듈 권장)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">git submodule add https://github.com/ThrowTheSwitch/Unity third_party/unity
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">git submodule add https://github.com/ThrowTheSwitch/CMock third_party/cmock
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;hr>
+&lt;h2 id="3-유닛-테스트-샘플">3) 유닛 테스트 샘플&lt;/h2>
+&lt;p>&lt;code>src/ringbuf.c&lt;/code>를 예로:&lt;/p></description></item><item><title>임베디드 코드 품질 개선을 위한 테스트 전략 (정리판)</title><link>https://nlimbo76.github.io/tech-notes/posts/embedded-test-strategy/</link><pubDate>Sun, 24 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/embedded-test-strategy/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
+&lt;p>하드웨어 제약과 실시간 요구가 있는 임베디드에서 품질은 &lt;strong>초기 설계 품질 + 자동화된 검증 체계&lt;/strong>로 결정됩니다.&lt;br>
+이 글은 “&lt;strong>테스트 피라미드&lt;/strong>(유닛:통합:HIL ≈ &lt;strong>70:20:10&lt;/strong>), &lt;strong>테스트 친화 설계&lt;/strong>, &lt;strong>CI 파이프라인&lt;/strong>”을 축으로 빠르게 적용할 수 있는 실무 전략을 정리합니다.&lt;/p>
+&lt;hr>
+&lt;h2 id="1-핵심-전략-요약">1) 핵심 전략 요약&lt;/h2>
+&lt;ul>
+&lt;li>&lt;strong>테스트 피라미드&lt;/strong>: 유닛(최다) → 통합(선별) → HIL(임계경로 위주).&lt;/li>
+&lt;li>&lt;strong>테스트 친화 설계(Design for Testability)&lt;/strong>:
+&lt;ul>
+&lt;li>HAL(하드웨어 추상화)로 &lt;strong>의존성 분리&lt;/strong>.&lt;/li>
+&lt;li>&lt;strong>링커 대체/약결(symbol weak)&lt;/strong>, &lt;strong>함수 포인터 주입&lt;/strong>, &lt;strong>인터페이스(ports/adapters)&lt;/strong>.&lt;/li>
+&lt;li>빌드 분리: &lt;code>Debug/Release/Test&lt;/code>(테스트 전용 설정·스텁 허용).&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;strong>CI 파이프라인&lt;/strong>:
+&lt;ul>
+&lt;li>Host(Unit) 테스트 + Coverage → Cross 빌드 산출물 → (옵션) QEMU/HIL 스모크.&lt;/li>
+&lt;li>실패 시 &lt;strong>아티팩트/로그&lt;/strong> 자동 첨부로 디버깅 시간 절감.&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="2-레벨별-테스트-설계">2) 레벨별 테스트 설계&lt;/h2>
+&lt;h3 id="21-유닛-테스트">2.1 유닛 테스트&lt;/h3>
+&lt;ul>
+&lt;li>“입출력 결정성”이 높은 순서로 작성. &lt;strong>순수 함수&lt;/strong>부터.&lt;/li>
+&lt;li>C 언어: Unity/CMock(가벼움), C++: doctest/Catch2(경량). GTest는 기능 풍부하나 상대적으로 무거움.&lt;/li>
+&lt;li>&lt;strong>링커 치환&lt;/strong>: &lt;code>-Wl,--wrap=foo&lt;/code>로 하드웨어 의존 함수를 테스트 더블로 대체.&lt;/li>
+&lt;/ul>
+&lt;h3 id="22-통합-테스트">2.2 통합 테스트&lt;/h3>
+&lt;ul>
+&lt;li>드라이버+프로토콜 등 &lt;strong>두 모듈 이상 결합&lt;/strong> 검증.&lt;/li>
+&lt;li>타이밍 창과 버퍼 경계(overflow/underflow) 케이스를 명시.&lt;/li>
+&lt;li>시리얼·SPI 등은 &lt;strong>Loopback/Fake HAL&lt;/strong>로 먼저 검증한 뒤 실제 보드로 축소 실행.&lt;/li>
+&lt;/ul>
+&lt;h3 id="23-hil하드웨어-인더루프">2.3 HIL(하드웨어 인더루프)&lt;/h3>
+&lt;ul>
+&lt;li>&lt;strong>임계경로&lt;/strong>만 추출: 부팅/안전정지/펌웨어 업데이트/전원순환.&lt;/li>
+&lt;li>자동화 장비 없이도 파이썬(PySerial/pyvisa)로 간단한 &lt;strong>스모크&lt;/strong>는 가능.&lt;/li>
+&lt;li>**롤백 가능한 펌업(OTA)**와 &lt;strong>Watchdog&lt;/strong> 스크립트화.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="3-cmake--ctest--coverage-예시">3) CMake + CTest + Coverage 예시&lt;/h2>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-cmake" data-lang="cmake">&lt;span class="line">&lt;span class="cl">&lt;span class="c"># CMakeLists.txt (테스트 전용)
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c">&lt;/span>&lt;span class="nb">enable_testing&lt;/span>&lt;span class="p">()&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span>&lt;span class="nb">add_executable&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">my_unit_tests&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s">tests/foo_test.c&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s">src/foo.c&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">)&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span>&lt;span class="nb">target_compile_options&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">my_unit_tests&lt;/span> &lt;span class="s">PRIVATE&lt;/span> &lt;span class="s">-O0&lt;/span> &lt;span class="s">-g&lt;/span> &lt;span class="s">--coverage&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span>&lt;span class="nb">target_link_libraries&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">my_unit_tests&lt;/span> &lt;span class="s">PRIVATE&lt;/span> &lt;span class="s">m&lt;/span> &lt;span class="s">gcov&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="err">&lt;/span>&lt;span class="nb">add_test&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">NAME&lt;/span> &lt;span class="s">foo_test&lt;/span> &lt;span class="s">COMMAND&lt;/span> &lt;span class="s">my_unit_tests&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="err">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-bash" data-lang="bash">&lt;span class="line">&lt;span class="cl">&lt;span class="c1"># 실행 &amp;amp; 커버리지&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">ctest --output-on-failure
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">lcov --directory . --capture --output-file coverage.info
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">genhtml coverage.info --output-directory coverage_html
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;hr>
+&lt;h2 id="4-github-actions-매트릭스요지">4) GitHub Actions 매트릭스(요지)&lt;/h2>
+&lt;div class="highlight">&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="nt">jobs&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">test-build&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">runs-on&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">ubuntu-latest&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">strategy&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">matrix&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">target&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="l">host, arm-none-eabi]&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">steps&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">uses&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">actions/checkout@v4&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">with&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>{&lt;span class="w"> &lt;/span>&lt;span class="nt">submodules&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="kc">true&lt;/span>&lt;span class="w"> &lt;/span>}&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">name&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">Host test&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">if&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">matrix.target == &amp;#39;host&amp;#39;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">run&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">|&lt;/span>&lt;span class="sd">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> cmake --build build -j
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> ctest --test-dir build --output-on-failure&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>- &lt;span class="nt">name&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">Cross build&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">if&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">matrix.target == &amp;#39;arm-none-eabi&amp;#39;&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="nt">run&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="p">|&lt;/span>&lt;span class="sd">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> cmake -S . -B build-arm -DCMAKE_TOOLCHAIN_FILE=toolchains/arm-none-eabi.cmake
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="sd"> cmake --build build-arm -j&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;hr>
+&lt;h2 id="5-실무-체크리스트">5) 실무 체크리스트&lt;/h2>
+&lt;ul>
+&lt;li>&lt;input disabled="" type="checkbox"> 테스트 대상 코드는 &lt;strong>하드웨어 접근을 직접 하지 않도록&lt;/strong> HAL 경유.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> 타이밍 의존 로직은 &lt;strong>클럭/타이머 인터페이스&lt;/strong>로 추상화.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> **정적분석(compile warnings = 0, -Wall -Wextra -Werror)**를 CI에 포함.&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> &lt;strong>UBSan/ASan&lt;/strong>은 Host에서 최대한 사용(베어메탈은 제한).&lt;/li>
+&lt;li>&lt;input disabled="" type="checkbox"> 실패 로그/아티팩트를 CI에서 자동 보존.&lt;/li>
+&lt;/ul>
+&lt;hr>
+&lt;h2 id="연계-글-예정">연계 글 (예정)&lt;/h2>
+&lt;ul>
+&lt;li>“임베디드 유닛/통합 테스트 구축 실습 (Unity+CMock+QEMU)”&lt;/li>
+&lt;li>“HIL 스모크 자동화: PySerial로 시작하는 전원순환/부트 검증”&lt;/li>
+&lt;/ul></description></item><item><title>임베디드 시스템 개발 방법론 정리 (확장판)</title><link>https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/</link><pubDate>Sat, 23 Aug 2025 00:00:00 +0000</pubDate><guid>https://nlimbo76.github.io/tech-notes/posts/embedded-methodology/</guid><description>&lt;h2 id="개요">개요&lt;/h2>
 &lt;p>임베디드 시스템 개발은 일반 애플리케이션과 달리 **자원 제약(메모리·CPU·전력)**과 &lt;strong>실시간성&lt;/strong>을 고려해야 합니다.
 이 때문에 개발 방법론 선택이 프로젝트의 성공과 실패를 크게 좌우합니다.
 본 문서는 실무 정리노트 스타일로 핵심 개념을 먼저 요약하고, 아래에 부연 설명과 연계 글 링크를 제공합니다.&lt;/p>
